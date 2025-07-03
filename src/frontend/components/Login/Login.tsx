@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import type { LoginFormState } from '../types';
+import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
-  const [formState, setFormState] = useState<LoginFormState>({
+  const navigate = useNavigate();
+  
+  const [formState, setFormState] = useState({
     email: '',
     password: '',
     firstName: '',
@@ -19,12 +21,12 @@ const Login = () => {
       if (!lastName.trim()) return 'Last name is required.';
     }
     if (!email.trim()) return 'Email is required.';
-    if (!email.includes('@')) return 'Email must contain an "@" sign.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Invalid email format.';
     if (!password.trim() || password.length < 6) return 'Password must be at least 6 characters.';
     return null;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const validationError = validateForm();
     if (validationError) {
@@ -32,10 +34,44 @@ const Login = () => {
       return;
     }
     setFormState({ ...formState, error: '' });
-    if (isSignUp) {
-      console.log({ firstName, lastName, email, password });
-    } else {
-      console.log({ email, password });
+
+    try {
+      const endpoint = isSignUp ? '/signup' : '/login';
+      const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          ...(isSignUp && { firstName, lastName }),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Something went wrong');
+      }
+
+      const data = await response.json();
+      
+      if (isSignUp) {
+        alert('Account created successfully! Please log in.');
+        setFormState({ ...formState, isSignUp: false }); // Switch to login
+      } else {
+        // Save JWT token and user data
+        localStorage.setItem('token', data.access_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
+        console.log('Token saved:', data.access_token);
+        console.log('User data saved:', data.user);
+        
+        // Navigate to dashboard instead of alert
+        navigate('/dashboard');
+      }
+      
+      console.log('Response from backend:', data);
+    } catch (err: any) {
+      setFormState({ ...formState, error: err.message });
     }
   };
 
@@ -89,7 +125,7 @@ const Login = () => {
         onClick={() => setFormState({ ...formState, isSignUp: !isSignUp, error: '' })}
         className="mt-4 text-blue-600 hover:underline"
       >
-        {isSignUp ? 'Already have an account? Login' : 'Don’t have an account? Sign Up'}
+        {isSignUp ? 'Already have an account? Login' : "Don't have an account? Sign Up"}
       </button>
     </div>
   );
